@@ -1,7 +1,7 @@
 ﻿
 namespace SimpleMapper
 {
-    interface IObjectFactory
+    public interface IObjectFactory
     {
         object InitializeType();
     }

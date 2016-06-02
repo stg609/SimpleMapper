@@ -10,7 +10,7 @@ using System.Reflection;
 namespace SimpleMapper
 {
 
-    public static class Mapper
+    public class Mapper
     {
         static ConcurrentDictionary<Tuple<Type, Type>, List<Tuple<bool, Delegate, Delegate, Type, Type>>> _maps = new ConcurrentDictionary<Tuple<Type, Type>, List<Tuple<bool, Delegate, Delegate, Type, Type>>>();
         static ConcurrentDictionary<string, Func<object, object, object, object>> _mapMethodDelegates = new ConcurrentDictionary<string, Func<object, object, object, object>>();
@@ -26,7 +26,7 @@ namespace SimpleMapper
         static readonly Type _mapDelegateType = typeof(Func<object, object, object, object>);
         static readonly MethodInfo _mapBaseMethodInfo = typeof(Mapper).GetMethod("Map");
 
-        public static void AddMap<TSource, TTarget>(Expression<Func<TSource, object>> source, Expression<Func<TTarget, object>> target)
+        public static void AddMap<TSource, TTarget>(Expression<Func<TSource, object>> source, Expression<Func<TTarget, object>> target, Expression rule = null)
             where TTarget : class, new()
             where TSource : class
         {
@@ -40,8 +40,18 @@ namespace SimpleMapper
             }
             try
             {
+                Expression targetBody = target.Body;
+                Expression sourceBody = source.Body;
+                if (targetBody.NodeType == ExpressionType.Convert)
+                {
+                    targetBody = ((UnaryExpression)targetBody).Operand;
+                }
+                if (sourceBody.NodeType == ExpressionType.Convert)
+                {
+                    sourceBody = ((UnaryExpression)sourceBody).Operand;
+                }
                 //{ TRequest.prop = TViewModel.prop}
-                BlockExpression block = Expression.Block(Expression.Assign(target.Body, source.Body));
+                BlockExpression block = Expression.Block(Expression.Assign(targetBody, sourceBody));
                 // (TRequest, TViewModel)=>{ TRequest.prop = TViewModel.prop}
                 LambdaExpression assignExpression = Expression.Lambda<Action<TTarget, TSource>>(block, parameters.Concat(source.Parameters));
 
@@ -51,6 +61,17 @@ namespace SimpleMapper
             {
                 delegates.Add(new Tuple<bool, Delegate, Delegate, Type, Type>(false, target.Compile(), source.Compile(), target.Body.Type, source.Body.Type));
             }
+        }
+
+        public static void ClearMaps()
+        {
+            _maps.Clear();
+            _mapMethodDelegates.Clear();
+            _setterMethodDelegates.Clear();
+            _getterMethodDelegates.Clear();
+            _ctorMethodDelegates.Clear();
+            _genericTypes.Clear();
+            _methodInfoCache.Clear();
         }
 
         public static TTarget Map<TSource, TTarget>(TSource source, TTarget target, UnityContainer container = null)
@@ -128,18 +149,26 @@ namespace SimpleMapper
                     sourceDelegate = delg.Item3 as Func<TSource, object>;
 
                     object sourceProp = sourceDelegate(source);
-                    if (sourceProp != null && sourceProp.GetType().IsArray)
+                    if (sourceProp == null)
+                    {
+                        throw new ArgumentNullException("The property of the source object can't be null");
+                    }
+                    else if (sourceProp.GetType().IsArray)
                     {
                         MapArray(result, targetType, delg.Item4, sourceProp, delg.Item5.GetElementType(), _mapDelegateType,
                              _mapMethodDelegates, _setterMethodDelegates, _ctorMethodDelegates, container);
 
+                    }
+                    else
+                    {
+                        throw new NotSupportedException(String.Format("{0} is not supported", sourceProp.GetType()));
                     }
                 }
             });
 
             return result;
         }
-        
+
         static void MapArray(object target, Type targetType, Type targetArrayPropType, object sourceProp,
             Type sourceArrayPropItemType, Type mapDelegateType,
             ConcurrentDictionary<string, Func<object, object, object, object>> mapDelegateCache,
@@ -158,7 +187,7 @@ namespace SimpleMapper
             {
                 tempList = _listType.MakeGenericType(targetArrayPropItemType);
                 _genericTypes.AddOrUpdate(genericTypeIdentity, tempList, (key, val) => tempList);
-            }   
+            }
             ConstructorInfo ctorInfo = tempList.GetConstructor(Type.EmptyTypes);
 
             int len = 0;

@@ -9,24 +9,23 @@ using System.Reflection;
 
 namespace SimpleMapper
 {
-
     public class Mapper
     {
-        static ConcurrentDictionary<Tuple<Type, Type>, List<Tuple<bool, Delegate, Delegate, Type, Type>>> _maps = new ConcurrentDictionary<Tuple<Type, Type>, List<Tuple<bool, Delegate, Delegate, Type, Type>>>();
-        static ConcurrentDictionary<string, Func<object, object, object, object>> _mapMethodDelegates = new ConcurrentDictionary<string, Func<object, object, object, object>>();
-        static ConcurrentDictionary<string, Action<object, object>> _setterMethodDelegates = new ConcurrentDictionary<string, Action<object, object>>();
-        static ConcurrentDictionary<string, Func<object, object>> _getterMethodDelegates = new ConcurrentDictionary<string, Func<object, object>>();
-        static ConcurrentDictionary<string, Func<object>> _ctorMethodDelegates = new ConcurrentDictionary<string, Func<object>>();
-        static ConcurrentDictionary<string, Type> _genericTypes = new ConcurrentDictionary<string, Type>();
-        static ConcurrentDictionary<string, MethodInfo> _methodInfoCache = new ConcurrentDictionary<string, MethodInfo>();
+        ConcurrentDictionary<Tuple<Type, Type>, List<Tuple<bool, Delegate, Delegate, Type, Type>>> _maps = new ConcurrentDictionary<Tuple<Type, Type>, List<Tuple<bool, Delegate, Delegate, Type, Type>>>();
+        ConcurrentDictionary<string, Func<object, object, object, object, object>> _mapMethodDelegates = new ConcurrentDictionary<string, Func<object, object, object, object, object>>();
+        ConcurrentDictionary<string, Action<object, object>> _setterMethodDelegates = new ConcurrentDictionary<string, Action<object, object>>();
+        ConcurrentDictionary<string, Func<object, object>> _getterMethodDelegates = new ConcurrentDictionary<string, Func<object, object>>();
+        ConcurrentDictionary<string, Func<object>> _ctorMethodDelegates = new ConcurrentDictionary<string, Func<object>>();
+        ConcurrentDictionary<string, Type> _genericTypes = new ConcurrentDictionary<string, Type>();
+        ConcurrentDictionary<string, MethodInfo> _methodInfoCache = new ConcurrentDictionary<string, MethodInfo>();
         static readonly Type _objType = typeof(object);
         static readonly Type _listType = typeof(List<>);
         static readonly Type _actObjType = typeof(Action<object, object>);
         static readonly Type _funcObjType = typeof(Func<object, object>);
-        static readonly Type _mapDelegateType = typeof(Func<object, object, object, object>);
+        static readonly Type _mapDelegateType = typeof(Func<object, object, object, object, object>);
         static readonly MethodInfo _mapBaseMethodInfo = typeof(Mapper).GetMethod("Map");
 
-        public static void AddMap<TSource, TTarget>(Expression<Func<TSource, object>> source, Expression<Func<TTarget, object>> target, Expression rule = null)
+        public Mapper AddMap<TSource, TTarget>(Expression<Func<TSource, object>> source, Expression<Func<TTarget, object>> target, Expression<Func<object, object, object>> rule = null)
             where TTarget : class, new()
             where TSource : class
         {
@@ -61,9 +60,11 @@ namespace SimpleMapper
             {
                 delegates.Add(new Tuple<bool, Delegate, Delegate, Type, Type>(false, target.Compile(), source.Compile(), target.Body.Type, source.Body.Type));
             }
+
+            return this;
         }
 
-        public static void ClearMaps()
+        public void ClearMaps()
         {
             _maps.Clear();
             _mapMethodDelegates.Clear();
@@ -74,7 +75,7 @@ namespace SimpleMapper
             _methodInfoCache.Clear();
         }
 
-        public static TTarget Map<TSource, TTarget>(TSource source, TTarget target, UnityContainer container = null)
+        public TTarget Map<TSource, TTarget>(TSource source, TTarget target, UnityContainer container = null)
             where TTarget : class, new()
             where TSource : class
         {
@@ -110,13 +111,13 @@ namespace SimpleMapper
                 if (!property.PropertyType.IsEnumerable())
                 {
                     MethodInfo mapMethodInfo = GetMapGenericMethod(sourceType, property.PropertyType);
-                    Func<object, object, object, object> mapFunc = GetInvoker(_mapMethodDelegates, _mapDelegateType, mapMethodInfo);
+                    Func<object, object, object, object, object> mapFunc = GetInvoker(_mapMethodDelegates, _mapDelegateType, mapMethodInfo);
 
 
                     MethodInfo getterMethodInfo = GetPropertyMethodInfo(property, PropertyType.Get);// property.GetGetMethod();
                     Func<object, object> getterFunc = GetInvoker(_getterMethodDelegates, _funcObjType, getterMethodInfo);
 
-                    object propValue = mapFunc(source, getterFunc(result), container);
+                    object propValue = mapFunc(this, source, getterFunc(result), container);
                     MethodInfo setterMethodInfo = GetPropertyMethodInfo(property, PropertyType.Set); // property.GetSetMethod();
                     Action<object, object> setterAction = GetInvoker(_setterMethodDelegates, _actObjType, setterMethodInfo);
 
@@ -169,9 +170,9 @@ namespace SimpleMapper
             return result;
         }
 
-        static void MapArray(object target, Type targetType, Type targetArrayPropType, object sourceProp,
+        void MapArray(object target, Type targetType, Type targetArrayPropType, object sourceProp,
             Type sourceArrayPropItemType, Type mapDelegateType,
-            ConcurrentDictionary<string, Func<object, object, object, object>> mapDelegateCache,
+            ConcurrentDictionary<string, Func<object, object, object, object, object>> mapDelegateCache,
             ConcurrentDictionary<string, Action<object, object>> setterDelegateCache,
             ConcurrentDictionary<string, Func<object>> ctorMethodDelegates,
             UnityContainer container = null)
@@ -204,9 +205,9 @@ namespace SimpleMapper
                 }
 
                 MethodInfo mapMethodInfo = GetMapGenericMethod(sourceArrayPropItemType, targetArrayPropItemType);
-                Func<object, object, object, object> mapFunc = GetInvoker(mapDelegateCache, mapDelegateType, mapMethodInfo);
+                Func<object, object, object, object, object> mapFunc = GetInvoker(mapDelegateCache, mapDelegateType, mapMethodInfo);
 
-                tempListInstance.Add(mapFunc(vmItm, null, container));
+                tempListInstance.Add(mapFunc(this, vmItm, null, container));
                 len++;
             }
 
@@ -223,7 +224,7 @@ namespace SimpleMapper
             setterAction(target, arr);
         }
 
-        static MethodInfo GetPropertyMethodInfo(PropertyInfo prop, PropertyType propType)
+        MethodInfo GetPropertyMethodInfo(PropertyInfo prop, PropertyType propType)
         {
             MethodInfo methodInfo = null;
             string key = prop.PropertyType.ToString() + propType.ToString();
@@ -246,7 +247,7 @@ namespace SimpleMapper
             return methodInfo;
         }
 
-        static MethodInfo GetMapGenericMethod(Type sourceType, Type targetType)
+        MethodInfo GetMapGenericMethod(Type sourceType, Type targetType)
         {
             MethodInfo mapMethodInfo = null;
             string key = sourceType.ToString() + targetType.ToString();
@@ -290,7 +291,7 @@ namespace SimpleMapper
         }
     }
 
-    enum PropertyType
+    internal enum PropertyType
     {
         Get,
         Set

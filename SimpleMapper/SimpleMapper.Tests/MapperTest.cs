@@ -8,10 +8,12 @@ namespace SimpleMapper.Tests
     [TestClass]
     public class MapperTest
     {
+        Mapper _mapper;
+
         [TestInitialize]
         public void Init()
         {
-            Mapper.ClearMaps();
+            _mapper = new Mapper();
         }
 
         [TestMethod]
@@ -24,12 +26,12 @@ namespace SimpleMapper.Tests
                 Str = 22,
                 Integer = 123
             };
-            Mapper.AddMap<TestModel, TestViewModel>(m => m.Arr, vm => vm.Arr);
-            Mapper.AddMap<TestModel, TestViewModel>(m => Convert.ToString(m.Str), vm => vm.Str);
-            Mapper.AddMap<TestModel, TestViewModel>(m => m.Integer, vm => vm.Integer);
+            _mapper.AddMap<TestModel, TestViewModel>(m => m.Arr, vm => vm.Arr)
+                .AddMap<TestModel, TestViewModel>(m => Convert.ToString(m.Str), vm => vm.Str)
+                .AddMap<TestModel, TestViewModel>(m => m.Integer, vm => vm.Integer);
 
             //Action
-            var result = Mapper.Map<TestModel, TestViewModel>(model, null);
+            var result = _mapper.Map<TestModel, TestViewModel>(model, null);
 
             //Assert
             Assert.AreEqual(model.Str.ToString(), result.Str);
@@ -50,12 +52,12 @@ namespace SimpleMapper.Tests
                 Str = 22,
                 Integer = 123
             };
-            Mapper.AddMap<TestModel, TestViewModel>(m => m.Arr, vm => vm.Arr);
+            _mapper.AddMap<TestModel, TestViewModel>(m => m.Arr, vm => vm.Arr)
             //Mapper.AddMap<TestModel, TestViewModel>(m => Convert.ToString(m.Str), vm => vm.Str);
-            Mapper.AddMap<TestModel, TestViewModel>(m => m.Integer, vm => vm.Integer);
+                .AddMap<TestModel, TestViewModel>(m => m.Integer, vm => vm.Integer);
 
             //Action
-            var result = Mapper.Map<TestModel, TestViewModel>(model, null, container);
+            var result = _mapper.Map<TestModel, TestViewModel>(model, null, container);
 
             //Assert
             Assert.AreEqual("This is created by factory", result.Str);
@@ -72,24 +74,72 @@ namespace SimpleMapper.Tests
                 Arr = new int[] { 1, 2, 3 },
                 Str = 22,
                 Integer = 123,
-                Child = new ChildModel
+                Child = new ViewModelChildModel
                 {
                     MyProperty = "This is Child"
                 }
             };
-            Mapper.AddMap<TestNestedModel, TestViewModel>(m => m.Arr, vm => vm.Arr);
-            Mapper.AddMap<TestNestedModel, TestViewModel>(m => Convert.ToString(m.Str), vm => vm.Str);
-            Mapper.AddMap<TestNestedModel, TestViewModel>(m => m.Integer, vm => vm.Integer);
-            Mapper.AddMap<TestNestedModel, TestViewModel>(m => m.Child.MyProperty, vm => vm.ChildProperty);
+            _mapper.AddMap<TestNestedModel, TestViewModel>(m => m.Arr, vm => vm.Arr)
+                .AddMap<TestNestedModel, TestViewModel>(m => Convert.ToString(m.Str), vm => vm.Str)
+                .AddMap<TestNestedModel, TestViewModel>(m => m.Integer, vm => vm.Integer)
+                .AddMap<TestNestedModel, TestViewModel>(m => m.Child.MyProperty, vm => vm.ChildProperty);
 
             //Action
-            var result = Mapper.Map<TestNestedModel, TestViewModel>(model, null);
+            var result = _mapper.Map<TestNestedModel, TestViewModel>(model, null);
 
             //Assert
             Assert.AreEqual(model.Str.ToString(), result.Str);
             Assert.AreEqual(model.Arr[2], result.Arr[2]);
             Assert.AreEqual(model.Integer, result.Integer);
             Assert.AreEqual(model.Child.MyProperty, result.ChildProperty);
+        }
+
+        [TestMethod]
+        public void MapArray()
+        {
+            //Prepare
+            TestNestedModel model = new TestNestedModel
+            {
+                Arr = new int[] { 1, 2, 3 },
+                Childs = new ViewModelChildModel[]
+                {
+                    new ViewModelChildModel
+                    {
+                         MyProperty = "aaa"
+                    }
+                }
+
+            };
+            
+            //Simple Type Array
+            _mapper.AddMap<TestNestedModel, TestViewModel>(m => m.Arr, vm => vm.Arr);
+
+            //Complex Type Array
+            _mapper.AddMap<ViewModelChildModel, ResultChildModel>(m => m.MyProperty, vm => vm.MyProperty);
+            _mapper.AddMap<TestNestedModel, TestViewModel>(m => m.Childs, vm => vm.Childs);
+
+            //Action
+            var result = _mapper.Map<TestNestedModel, TestViewModel>(model, null);
+
+            //Assert
+            Assert.AreEqual(model.Arr[2], result.Arr[2]);
+            Assert.AreEqual(model.Childs.Length, result.Childs.Length);
+            Assert.AreEqual(model.Childs[0].MyProperty, result.Childs[0].MyProperty);
+        }
+
+        public void MapComplexArray()
+        {
+            //Prepare
+            TestNestedModel model = new TestNestedModel
+            {
+                Childs = new ViewModelChildModel[]
+                {
+                    new ViewModelChildModel
+                    {
+                         MyProperty = "aaa"
+                    }
+                }
+            };
         }
     }
 
@@ -101,29 +151,35 @@ namespace SimpleMapper.Tests
         public int Str { get; set; }
         public int[] Arr { get; set; }
     }
-
-
+    
     public class TestViewModel
     {
         public int Integer { get; set; }
         public string Str { get; set; }
         public int[] Arr { get; set; }
         public string ChildProperty { get; set; }
-        public string[] ChildProperties { get; set; }
+        public ResultChildModel[] Childs { get; set; }
     }
 
-    public class ChildModel
+    public class ViewModelChildModel
     {
         public string MyProperty { get; set; }
     }
+       
+
+    public class ResultChildModel
+    {
+        public string MyProperty { get; set; }
+    }
+
 
     public class TestNestedModel
     {
         public int Integer { get; set; }
         public int Str { get; set; }
         public int[] Arr { get; set; }
-        public ChildModel Child { get; set; }
-        public ChildModel[] Childs { get; set; }
+        public ViewModelChildModel Child { get; set; }
+        public ViewModelChildModel[] Childs { get; set; }
     }
 
     public class TestViewModelFactory : IObjectFactory

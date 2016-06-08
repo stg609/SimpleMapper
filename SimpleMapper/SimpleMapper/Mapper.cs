@@ -25,7 +25,7 @@ namespace SimpleMapper
         static readonly Type _mapDelegateType = typeof(Func<object, object, object, object, object>);
         static readonly MethodInfo _mapBaseMethodInfo = typeof(Mapper).GetMethod("Map");
 
-        public Mapper AddMap<TSource, TTarget>(Expression<Func<TSource, object>> source, Expression<Func<TTarget, object>> target, Expression<Func<object, object, object>> rule = null)
+        public Mapper AddMap<TSource, TTarget>(Expression<Func<TSource, object>> source, Expression<Func<TTarget, object>> target)
             where TTarget : class, new()
             where TSource : class
         {
@@ -52,8 +52,10 @@ namespace SimpleMapper
                 //{ TRequest.prop = TViewModel.prop}
                 BlockExpression block = Expression.Block(Expression.Assign(targetBody, sourceBody));
                 // (TRequest, TViewModel)=>{ TRequest.prop = TViewModel.prop}
-                LambdaExpression assignExpression = Expression.Lambda<Action<TTarget, TSource>>(block, parameters.Concat(source.Parameters));
+                LambdaExpression assignExpression = Expression.Lambda<Action<TSource, TTarget>>(block, source.Parameters.Concat(parameters));
 
+                //Tuple - bool - indicate whether the source and target expression is a compatible expression
+                //Tuple - Delegate 1 - indicate the compatible delegate or source delegate of incompatible delegate
                 delegates.Add(new Tuple<bool, Delegate, Delegate, Type, Type>(true, assignExpression.Compile(), null, null, null));
             }
             catch (Exception)
@@ -61,6 +63,29 @@ namespace SimpleMapper
                 delegates.Add(new Tuple<bool, Delegate, Delegate, Type, Type>(false, target.Compile(), source.Compile(), target.Body.Type, source.Body.Type));
             }
 
+            return this;
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <typeparam name="TSource"></typeparam>
+        /// <typeparam name="TTarget"></typeparam>
+        /// <param name="mapping"></param>
+        /// <returns></returns>
+        public Mapper AddMap<TSource, TTarget>(Action<TSource, TTarget> mapping)
+            where TTarget : class, new()
+            where TSource : class
+        {
+            List<Tuple<bool, Delegate, Delegate, Type, Type>> delegates = null;
+            _maps.TryGetValue(new Tuple<Type, Type>(typeof(TTarget), typeof(TSource)), out delegates);
+            if (delegates == null)
+            {
+                delegates = new List<Tuple<bool, Delegate, Delegate, Type, Type>>();
+                _maps.AddOrUpdate(new Tuple<Type, Type>(typeof(TTarget), typeof(TSource)), delegates, (key, val) => delegates);
+            }
+
+            delegates.Add(new Tuple<bool, Delegate, Delegate, Type, Type>(true, mapping, null, null, null));
             return this;
         }
 
@@ -99,7 +124,7 @@ namespace SimpleMapper
             {
                 result = target;
             }
-
+            
             //If there're complex type, then recursion
             foreach (PropertyInfo property in targetType.GetProperties())
             {
@@ -138,10 +163,10 @@ namespace SimpleMapper
             {
                 if (delg.Item1)
                 {
-                    Action<TTarget, TSource> mapAction = delg.Item2 as Action<TTarget, TSource>;
+                    Action<TSource, TTarget> mapAction = delg.Item2 as Action<TSource, TTarget>;
                     if (mapAction != null)
                     {
-                        mapAction(result, source);
+                        mapAction(source, result);
                     }
                 }
                 else
@@ -170,7 +195,7 @@ namespace SimpleMapper
             return result;
         }
 
-        void MapArray(object target, Type targetType, Type targetArrayPropType, object sourceProp,
+        private void MapArray(object target, Type targetType, Type targetArrayPropType, object sourceProp,
             Type sourceArrayPropItemType, Type mapDelegateType,
             ConcurrentDictionary<string, Func<object, object, object, object, object>> mapDelegateCache,
             ConcurrentDictionary<string, Action<object, object>> setterDelegateCache,

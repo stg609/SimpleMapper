@@ -7,6 +7,11 @@ namespace SimpleMapper
 {
     public static class FastInvoker
     {
+        static readonly Type objType = typeof(object);
+        static readonly Type voidType = typeof(void);
+        static readonly Type funcType = typeof(Func<object>);
+
+
         public static Delegate GetInvoker(Type delegateType, MethodInfo method)
         {
             List<Type> parameterTypes = new List<Type>();
@@ -14,17 +19,18 @@ namespace SimpleMapper
 
             if (!method.IsStatic)
             {
-                parameterTypes.Add(typeof(object));
+                parameterTypes.Add(objType);
             }
 
             foreach (ParameterInfo parameter in paramInfos)
             {
-                parameterTypes.Add(typeof(object));
+                parameterTypes.Add(objType);
             }
 
             //Dynamic set TRequest.prop = propValue
-            DynamicMethod dym = new DynamicMethod(string.Empty,
-                method.ReturnType, parameterTypes.ToArray(),
+            DynamicMethod dym = new DynamicMethod(String.Empty,
+                method.ReturnType == voidType ? voidType : objType,
+                parameterTypes.ToArray(),
                 method.DeclaringType.Module);
 
             ILGenerator il = dym.GetILGenerator();
@@ -38,7 +44,7 @@ namespace SimpleMapper
             {
                 LoadArgs(il, i);
 
-                Type parmType = paramInfos[i-index].ParameterType;
+                Type parmType = paramInfos[i - index].ParameterType;
                 if (parmType.IsValueType)
                 {
                     il.Emit(OpCodes.Unbox_Any, parmType);
@@ -55,17 +61,10 @@ namespace SimpleMapper
             }
 
             //Return Value
-            //if (method.ReturnType == typeof(void))
-            //{
-            //    il.Emit(OpCodes.Ldnull);
-            //}
-            //else
-            //{
-            //if (method.ReturnType.IsValueType)
-            //{
-            //    il.Emit(OpCodes.Box, method.ReturnType);
-            //}
-            //}
+            if (method.ReturnType != voidType && method.ReturnType.IsValueType)
+            {
+                il.Emit(OpCodes.Box, method.ReturnType);
+            }
             il.Emit(OpCodes.Ret);
 
             return dym.CreateDelegate(delegateType);
@@ -74,11 +73,11 @@ namespace SimpleMapper
         public static Func<object> GetConstructor(ConstructorInfo constructor)
         {
             DynamicMethod ctor = new DynamicMethod(String.Empty, constructor.DeclaringType, null);
-            var il = ctor.GetILGenerator();
+            ILGenerator il = ctor.GetILGenerator();
             il.Emit(OpCodes.Newobj, constructor);
             il.Emit(OpCodes.Ret);
 
-            return ctor.CreateDelegate(typeof(Func<object>)) as Func<object>;
+            return ctor.CreateDelegate(funcType) as Func<object>;
         }
 
         static void LoadArgs(ILGenerator il, int i)
@@ -100,7 +99,7 @@ namespace SimpleMapper
                 default:
                     il.Emit(OpCodes.Ldarg_S, i);
                     break;
-            }          
+            }
         }
     }
 }

@@ -7,7 +7,7 @@ namespace SimpleMapper
     {
         public static bool IsSimpleType(this Type type)
         {
-            if (type.IsPrimitive || type == typeof(Decimal) || type == typeof(String) || type == typeof(string[]))
+            if (type.IsPrimitive || type == typeof(Decimal) || type == typeof(String) || type == typeof(string[]) || type == typeof(DateTime))
             {
                 return true;
             }

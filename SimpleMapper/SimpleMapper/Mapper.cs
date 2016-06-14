@@ -11,7 +11,7 @@ namespace SimpleMapper
 {
     public class Mapper
     {
-        ConcurrentDictionary<Tuple<Type, Type>, List<Tuple<bool, Delegate, Delegate, Type, Type>>> _maps = new ConcurrentDictionary<Tuple<Type, Type>, List<Tuple<bool, Delegate, Delegate, Type, Type>>>();
+        ConcurrentDictionary<Tuple<Type, Type>, List<Tuple<bool, Delegate, Delegate, Delegate, Type, Type>>> _maps = new ConcurrentDictionary<Tuple<Type, Type>, List<Tuple<bool, Delegate, Delegate, Delegate, Type, Type>>>();
         ConcurrentDictionary<string, Func<object, object, object, object, object>> _mapMethodDelegates = new ConcurrentDictionary<string, Func<object, object, object, object, object>>();
         ConcurrentDictionary<string, Action<object, object>> _setterMethodDelegates = new ConcurrentDictionary<string, Action<object, object>>();
         ConcurrentDictionary<string, Func<object, object>> _getterMethodDelegates = new ConcurrentDictionary<string, Func<object, object>>();
@@ -25,16 +25,25 @@ namespace SimpleMapper
         static readonly Type _mapDelegateType = typeof(Func<object, object, object, object, object>);
         static readonly MethodInfo _mapBaseMethodInfo = typeof(Mapper).GetMethod("Map");
 
-        public Mapper AddMap<TSource, TTarget>(Expression<Func<TSource, object>> source, Expression<Func<TTarget, object>> target)
+        /// <summary>
+        /// To Add a mapping rule between two property 
+        /// </summary>
+        /// <typeparam name="TSource">Source Type</typeparam>
+        /// <typeparam name="TTarget">Target Type</typeparam>
+        /// <param name="source">Expression of the source property</param>
+        /// <param name="target">Expression of the target property</param>
+        /// <param name="useDefaultValue">Whether to use default value of the property. Default value will be used when the predication is true</param>
+        /// <returns>Mapper</returns>
+        public Mapper AddMap<TSource, TTarget>(Expression<Func<TSource, object>> source, Expression<Func<TTarget, object>> target, Predicate<TSource> useDefaultValue = null)
             where TTarget : class, new()
             where TSource : class
         {
             ParameterExpression[] parameters = target.Parameters.ToArray();
-            List<Tuple<bool, Delegate, Delegate, Type, Type>> delegates = null;
+            List<Tuple<bool, Delegate, Delegate, Delegate, Type, Type>> delegates = null;
             _maps.TryGetValue(new Tuple<Type, Type>(typeof(TTarget), typeof(TSource)), out delegates);
             if (delegates == null)
             {
-                delegates = new List<Tuple<bool, Delegate, Delegate, Type, Type>>();
+                delegates = new List<Tuple<bool, Delegate, Delegate, Delegate, Type, Type>>();
                 _maps.AddOrUpdate(new Tuple<Type, Type>(typeof(TTarget), typeof(TSource)), delegates, (key, val) => delegates);
             }
             try
@@ -54,38 +63,46 @@ namespace SimpleMapper
                 // (TRequest, TViewModel)=>{ TRequest.prop = TViewModel.prop}
                 LambdaExpression assignExpression = Expression.Lambda<Action<TSource, TTarget>>(block, source.Parameters.Concat(parameters));
 
+
                 //Tuple - bool - indicate whether the source and target expression is a compatible expression
-                //Tuple - Delegate 1 - indicate the compatible delegate or source delegate of incompatible delegate
-                delegates.Add(new Tuple<bool, Delegate, Delegate, Type, Type>(true, assignExpression.Compile(), null, null, null));
+                //Tuple - Delegate 1 - indicate the predication about whether to use default value
+                //Tuple - Delegate 2 - indicate the compatible delegate or source delegate of incompatible delegate
+                delegates.Add(new Tuple<bool, Delegate, Delegate, Delegate, Type, Type>(true, useDefaultValue, assignExpression.Compile(), null, null, null));
             }
             catch (Exception)
             {
-                delegates.Add(new Tuple<bool, Delegate, Delegate, Type, Type>(false, target.Compile(), source.Compile(), target.Body.Type, source.Body.Type));
+                //Tuple - bool - indicate whether the source and target expression is a compatible expression
+                //Tuple - Delegate 1 - indicate the predication about whether to use default value
+                //Tuple - Delegate 2 - indicate the target property 
+                //Tuple - Delegate 3 - indicate the source property
+                //Tuple - Type 1 - indicate the target type
+                //Tuple - Type 2 - indicate the source type
+                delegates.Add(new Tuple<bool, Delegate, Delegate, Delegate, Type, Type>(false, useDefaultValue, target.Compile(), source.Compile(), target.Body.Type, source.Body.Type));
             }
 
             return this;
         }
 
         /// <summary>
-        /// 
+        /// To Add a custom mapping rules for two objects
         /// </summary>
-        /// <typeparam name="TSource"></typeparam>
-        /// <typeparam name="TTarget"></typeparam>
-        /// <param name="mapping"></param>
-        /// <returns></returns>
+        /// <typeparam name="TSource">Source Type</typeparam>
+        /// <typeparam name="TTarget">Target Type</typeparam>
+        /// <param name="mapping">Mapping Rule</param>
+        /// <returns>Mapper</returns>
         public Mapper AddMap<TSource, TTarget>(Action<TSource, TTarget> mapping)
             where TTarget : class, new()
             where TSource : class
         {
-            List<Tuple<bool, Delegate, Delegate, Type, Type>> delegates = null;
+            List<Tuple<bool, Delegate, Delegate, Delegate, Type, Type>> delegates = null;
             _maps.TryGetValue(new Tuple<Type, Type>(typeof(TTarget), typeof(TSource)), out delegates);
             if (delegates == null)
             {
-                delegates = new List<Tuple<bool, Delegate, Delegate, Type, Type>>();
+                delegates = new List<Tuple<bool, Delegate, Delegate, Delegate, Type, Type>>();
                 _maps.AddOrUpdate(new Tuple<Type, Type>(typeof(TTarget), typeof(TSource)), delegates, (key, val) => delegates);
             }
 
-            delegates.Add(new Tuple<bool, Delegate, Delegate, Type, Type>(true, mapping, null, null, null));
+            delegates.Add(new Tuple<bool, Delegate, Delegate, Delegate, Type, Type>(true, new Predicate<TSource>(o => false), mapping, null, null, null));
             return this;
         }
 
@@ -100,7 +117,16 @@ namespace SimpleMapper
             _methodInfoCache.Clear();
         }
 
-        public TTarget Map<TSource, TTarget>(TSource source, TTarget target, UnityContainer container = null)
+        /// <summary>
+        /// Map from source Type to target Type
+        /// </summary>
+        /// <typeparam name="TSource">Source Type</typeparam>
+        /// <typeparam name="TTarget">Target Type</typeparam>
+        /// <param name="source">source object</param>
+        /// <param name="target">target object</param>
+        /// <param name="container">Unity Container which containing the logic to instantiate the target type</param>
+        /// <returns>Target object after mapping</returns>
+        public TTarget Map<TSource, TTarget>(TSource source, TTarget target = null, UnityContainer container = null)
             where TTarget : class, new()
             where TSource : class
         {
@@ -124,8 +150,15 @@ namespace SimpleMapper
             {
                 result = target;
             }
-            
-            //If there're complex type, then recursion
+
+            MethodInfo mapMethodInfo = null;
+            MethodInfo getterMethodInfo = null;
+            MethodInfo setterMethodInfo = null;
+            Action<object, object> setterAction = null;
+            Func<object, object> getterFunc = null;
+            Func<object, object, object, object, object> mapFunc = null;
+
+            //If this is complex type, then recursion
             foreach (PropertyInfo property in targetType.GetProperties())
             {
                 if (property.PropertyType.IsSimpleType())
@@ -135,18 +168,52 @@ namespace SimpleMapper
 
                 if (!property.PropertyType.IsEnumerable())
                 {
-                    MethodInfo mapMethodInfo = GetMapGenericMethod(sourceType, property.PropertyType);
-                    Func<object, object, object, object, object> mapFunc = GetInvoker(_mapMethodDelegates, _mapDelegateType, mapMethodInfo);
+                    List<Type> sourceTypeMapToTargetType = (from map in _maps
+                                                            where map.Key.Item1 == property.PropertyType
+                                                            select map.Key.Item2).ToList();
 
+                    if (sourceTypeMapToTargetType.Count == 0 && container != null && container.IsRegistered<IObjectFactory>(property.PropertyType.FullName))
+                    {
+                        //if the target type is not existed in the mapping rule and also registed in the Unity which means the target should be instantiated whatever.
+                        sourceTypeMapToTargetType.Add(sourceType);
+                    }
 
-                    MethodInfo getterMethodInfo = GetPropertyMethodInfo(property, PropertyType.Get);// property.GetGetMethod();
-                    Func<object, object> getterFunc = GetInvoker(_getterMethodDelegates, _funcObjType, getterMethodInfo);
+                    foreach (Type sType in sourceTypeMapToTargetType)
+                    {
+                        if (sType == sourceType)
+                        {
+                            mapMethodInfo = GetMapGenericMethod(sourceType, property.PropertyType);
+                            mapFunc = GetInvoker(_mapMethodDelegates, _mapDelegateType, mapMethodInfo);
 
-                    object propValue = mapFunc(this, source, getterFunc(result), container);
-                    MethodInfo setterMethodInfo = GetPropertyMethodInfo(property, PropertyType.Set); // property.GetSetMethod();
-                    Action<object, object> setterAction = GetInvoker(_setterMethodDelegates, _actObjType, setterMethodInfo);
+                            getterMethodInfo = GetPropertyMethodInfo(property, PropertyType.Get);// property.GetGetMethod();
+                            getterFunc = GetInvoker(_getterMethodDelegates, _funcObjType, getterMethodInfo);
 
-                    setterAction(result, propValue);
+                            object propValue = mapFunc(this, source, getterFunc(result), container);
+                            setterMethodInfo = GetPropertyMethodInfo(property, PropertyType.Set); // property.GetSetMethod();
+                            setterAction = GetInvoker(_setterMethodDelegates, _actObjType, setterMethodInfo);
+
+                            setterAction(result, propValue);
+                        }
+                        else
+                        {
+                            PropertyInfo sourceProp = sourceType.GetProperties().SingleOrDefault(prop => prop.PropertyType == sType);
+
+                            mapMethodInfo = GetMapGenericMethod(sType, property.PropertyType);
+                            mapFunc = GetInvoker(_mapMethodDelegates, _mapDelegateType, mapMethodInfo);
+
+                            getterMethodInfo = GetPropertyMethodInfo(property, PropertyType.Get);
+                            getterFunc = GetInvoker(_getterMethodDelegates, _funcObjType, getterMethodInfo);
+
+                            MethodInfo getterSourceMethodInfo = GetPropertyMethodInfo(sourceProp, PropertyType.Get);
+                            Func<object, object> getterSourceFunc = GetInvoker(_getterMethodDelegates, _funcObjType, getterSourceMethodInfo);
+
+                            object propValue = mapFunc(this, getterSourceFunc(source), getterFunc(result), container);
+                            setterMethodInfo = GetPropertyMethodInfo(property, PropertyType.Set);
+                            setterAction = GetInvoker(_setterMethodDelegates, _actObjType, setterMethodInfo);
+
+                            setterAction(result, propValue);
+                        }
+                    }
                 }
             }
 
@@ -163,16 +230,17 @@ namespace SimpleMapper
             {
                 if (delg.Item1)
                 {
-                    Action<TSource, TTarget> mapAction = delg.Item2 as Action<TSource, TTarget>;
-                    if (mapAction != null)
+                    Action<TSource, TTarget> mapAction = delg.Item3 as Action<TSource, TTarget>;
+                    Predicate<TSource> predicate = delg.Item2 as Predicate<TSource>;
+                    if (mapAction != null && (predicate == null || !predicate(source)))
                     {
                         mapAction(source, result);
                     }
                 }
                 else
                 {
-                    targetDelegate = delg.Item2 as Func<TTarget, object>;
-                    sourceDelegate = delg.Item3 as Func<TSource, object>;
+                    targetDelegate = delg.Item3 as Func<TTarget, object>;
+                    sourceDelegate = delg.Item4 as Func<TSource, object>;
 
                     object sourceProp = sourceDelegate(source);
                     if (sourceProp == null)
@@ -181,11 +249,10 @@ namespace SimpleMapper
                     }
                     else if (sourceProp.GetType().IsArray)
                     {
-                        MapArray(result, targetType, delg.Item4, sourceProp, delg.Item5.GetElementType(), _mapDelegateType,
+                        MapArray(result, targetType, delg.Item5, sourceProp, delg.Item6.GetElementType(), _mapDelegateType,
                              _mapMethodDelegates, _setterMethodDelegates, _ctorMethodDelegates, container);
-
                     }
-                    else
+                    else if (sourceProp.GetType().IsEnumerable())
                     {
                         throw new NotSupportedException(String.Format("{0} is not supported", sourceProp.GetType()));
                     }
@@ -193,6 +260,54 @@ namespace SimpleMapper
             });
 
             return result;
+        }
+
+        /// <summary>
+        /// Automatically map between two objects according to the property name
+        /// </summary>
+        /// <typeparam name="TSource"></typeparam>
+        /// <typeparam name="TTarget"></typeparam>
+        /// <param name="source"></param>
+        /// <param name="target"></param>
+        /// <returns></returns>
+        public TTarget AutoMap<TSource, TTarget>(TSource source, TTarget target = null)
+            where TTarget : class, new()
+            where TSource : class
+        {
+            Type targetType = typeof(TTarget);
+            Type sourceType = typeof(TSource);
+
+            if (source == null)
+            {
+                throw new ArgumentNullException("source");
+            }
+
+            if (target == null)
+            {
+                target = new TTarget();
+            }
+
+            MethodInfo getterMethodInfo = null;
+            MethodInfo setterMethodInfo = null;
+            Func<object, object> getterFunc = null;
+            Action<object, object> setterAction = null;
+            IEnumerable<PropertyInfo> sourceProps = sourceType.GetProperties();
+            foreach (PropertyInfo property in targetType.GetProperties())
+            {
+                PropertyInfo mappedProp = sourceProps.SingleOrDefault(prop => prop.Name.Equals(property.Name) && prop.PropertyType == property.PropertyType);
+
+                if (mappedProp != null && property.PropertyType.IsSimpleType())
+                {
+                    getterMethodInfo = GetPropertyMethodInfo(mappedProp, PropertyType.Get);// property.GetGetMethod();
+                    getterFunc = GetInvoker(_getterMethodDelegates, _funcObjType, getterMethodInfo);
+
+                    setterMethodInfo = GetPropertyMethodInfo(property, PropertyType.Set); // property.GetSetMethod();
+                    setterAction = GetInvoker(_setterMethodDelegates, _actObjType, setterMethodInfo);
+                    setterAction(target, getterFunc(source));
+                }
+            }
+
+            return target;
         }
 
         private void MapArray(object target, Type targetType, Type targetArrayPropType, object sourceProp,

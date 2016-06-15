@@ -150,20 +150,6 @@ namespace SimpleMapper.Tests
             Assert.AreEqual(model.ATMBProperty.BDateProperty, result.ATVMBProperty.BDateProperty);
             Assert.AreEqual(model.ATMBProperty.BIntProperty, result.ATVMBProperty.BIntProperty);
             Assert.AreEqual(model.ATMBProperty.BStrProperty, result.ATVMBProperty.BStrProperty);
-
-            //AutoMapper.Mapper.Initialize(cfg => cfg.CreateMap<TestModelA, TestVMA>()
-            //    .ForMember(vm=>vm.ATVMBProperty, opt=>opt.MapFrom<TestModelA>());
-            //AutoMapper.Mapper.Initialize(cfg => cfg.CreateMap<TestModelB, TestVMB>());
-            ////AutoMapper.Mapper.Initialize(cfg => cfg.CreateMap<TestModelC, TestVMC>());
-            //TestVMA vmm = null;
-            //Stopwatch watch = new Stopwatch();
-            //watch.Restart();
-            //for (int i = 0; i < 100000; i++)
-            //{
-            //    vmm = AutoMapper.Mapper.Instance.Map<TestVMA>(model);
-            //}
-            //watch.Stop();
-            //Debug.WriteLine(watch.ElapsedMilliseconds);
         }
 
         [TestMethod]

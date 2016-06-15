@@ -9,7 +9,7 @@ Before using Mapper, we need create a Mapper instance firstly.
 
 ## Important Methods
 
-**AddMap
+**AddMap**
 
     Mapper AddMap<TSource, TTarget>(sourceProperty, targetProperty);
 
@@ -20,7 +20,7 @@ e.g.
     
 As the method returns Mapper object, we can contiune to invoke other methods afterwards.
 
-**Map
+**Map**
 
     TTarget Map<TSource, TTarget>(TSource sourceObj, TTarget targetObj = null, UnityContainer container = null)
 

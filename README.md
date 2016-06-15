@@ -1,7 +1,7 @@
 # SimpleMapper
 SimpleMapper is used to map from source to target. If the target is null, the mapper will try to find the corresponding IObjectFactory to create a new instance for the target (If the target is not existed, it will use the default constructor of the target type to create one).
 
-# Getting Startted
+# Getting Started
 
 Before using Mapper, we need create a Mapper instance firstly.
     Mapper _mapper = new Mapper();

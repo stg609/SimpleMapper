@@ -245,7 +245,7 @@ The effect is the same as above demo.
 
 ## Restrictions
 
-**v0.9**
+**v0.1**
 
 -Only support array, List or other Enumerations are not supported
 

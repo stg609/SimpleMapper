@@ -11,7 +11,7 @@ Before using Mapper, we need create a Mapper instance firstly.
 
 **AddMap**
 
-    Mapper AddMap<TSource, TTarget>(sourceProperty, targetProperty);
+    Mapper AddMap<TSource, TTarget>(sourceProperty, targetProperty, useDefaultValue);
 
 This method is used to create the mapping rule between two models. 
 e.g.
@@ -19,6 +19,8 @@ e.g.
     _mapper.AddMap<TestModelA, TestVMA>(m => m.AFloatProperty, vm => vm.AFloatProperty)
     
 As the method returns Mapper object, we can contiune to invoke other methods afterwards.
+
+*useDefaultValue* is used to indicate wheather the default value of the property (by Factory) will be used.
 
 **Map**
 
@@ -241,3 +243,10 @@ If the way creating mapping rule is not sufficient, we can use custom way to cre
     
 The effect is the same as above demo.
 
+## Restrictions
+
+**v0.9**
+
+-Only support array, List or other Enumerations are not supported
+
+-AutoMapper is not fully supported
